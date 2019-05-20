@@ -17,11 +17,11 @@ import lombok.Value;
  */
 @Value
 @AllArgsConstructor(staticName = "of")
-class ExpectedResponse {
+public class ExpectedResponse {
   Response response;
 
   /** Expect the HTTP status code to be the given value. */
-  ExpectedResponse expect(int statusCode) {
+  public ExpectedResponse expect(int statusCode) {
     try {
       response.then().statusCode(statusCode);
     } catch (AssertionError e) {
@@ -48,7 +48,7 @@ class ExpectedResponse {
    * Expect the body to be a JSON list represented by the given type, using the project standard
    * {@link JacksonConfig} object mapper.
    */
-  <T> List<T> expectListOf(Class<T> type) {
+  public <T> List<T> expectListOf(Class<T> type) {
     try {
       ObjectMapper mapper = JacksonConfig.createMapper();
       return mapper.readValue(
@@ -64,7 +64,7 @@ class ExpectedResponse {
    * Expect the body to be JSON represented by the given type, using the project standard {@link
    * JacksonConfig} object mapper, then perform Javax Validation against it.
    */
-  <T> T expectValid(Class<T> type) {
+  public <T> T expectValid(Class<T> type) {
     T payload = expect(type);
     Set<ConstraintViolation<T>> violations =
         Validation.buildDefaultValidatorFactory().getValidator().validate(payload);

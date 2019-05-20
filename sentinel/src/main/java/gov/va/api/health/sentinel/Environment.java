@@ -18,7 +18,7 @@ public enum Environment {
   }
 
   /** Parse the system property 'sentinel' into the appropriate enum. */
-  static Environment get() {
+  public static Environment get() {
     switch (sentinelProperty()) {
       case "LAB":
         return Environment.LAB;

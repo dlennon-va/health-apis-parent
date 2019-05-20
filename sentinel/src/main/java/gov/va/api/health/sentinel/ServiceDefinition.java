@@ -32,7 +32,8 @@ public final class ServiceDefinition {
 
   Supplier<Optional<String>> accessToken;
 
-  RequestSpecification requestSpecification() {
+  /** Returns Request Specification with or without jargonaut header. */
+  public RequestSpecification requestSpecification() {
     RequestSpecification spec =
         RestAssured.given()
             .baseUri(url())
@@ -55,7 +56,7 @@ public final class ServiceDefinition {
    * Guaranteed to return a url + path that adds / as necessary to produce a url that ends in a /.
    * e.g. https://something.com/my/cool/api/
    */
-  String urlWithApiPath() {
+  public String urlWithApiPath() {
     StringBuilder builder = new StringBuilder(url());
     if (!apiPath().startsWith("/")) {
       builder.append('/');
