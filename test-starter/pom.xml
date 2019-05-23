@@ -12,6 +12,7 @@
     <docker-maven-plugin.version>0.24.0</docker-maven-plugin.version>
     <docker.organization>vasdvp</docker.organization>
     <docker.tag>latest</docker.tag>
+    <docker.imageName>health-apis-${project.artifactId}</docker.imageName>
     <jacoco.skip>true</jacoco.skip>
     <maven-shade-plugin.version>3.2.1</maven-shade-plugin.version>
     <process-exec-maven-plugin.version>0.7</process-exec-maven-plugin.version>
@@ -130,7 +131,7 @@
             <configuration>
               <images>
                 <image>
-                  <name>${docker.organization}/health-apis-${project.artifactId}</name>
+                  <name>${docker.organization}/${docker.imageName}</name>
                   <build>
                     <assembly>
                       <descriptor>assembly.xml</descriptor>
