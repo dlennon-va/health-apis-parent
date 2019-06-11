@@ -9,7 +9,8 @@ public enum Environment {
   LOCAL,
   PROD,
   QA,
-  STAGING;
+  STAGING,
+  STAGING_LAB;
 
   static {
     log.info(
@@ -30,6 +31,9 @@ public enum Environment {
         return Environment.QA;
       case "STAGING":
         return Environment.STAGING;
+      case "STAGING_LAB": // FALL-THROUGH
+      case "STAGING-LAB":
+        return Environment.STAGING_LAB;
       default:
         throw new IllegalArgumentException("Unknown sentinel environment: " + sentinelProperty());
     }
