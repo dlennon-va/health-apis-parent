@@ -1,25 +1,28 @@
 package gov.va.api.health.autoconfig.configuration;
 
-import static org.apache.commons.lang3.StringUtils.trim;
+import static org.apache.commons.lang3.StringUtils.trimToNull;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
+import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.introspect.AnnotatedClass;
 import com.fasterxml.jackson.databind.introspect.JacksonAnnotationIntrospector;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import java.io.IOException;
+import lombok.SneakyThrows;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -67,7 +70,6 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class JacksonConfig {
-
   /** Return a configured Jackson ObjectMapper. This method is useful as a supplier function. */
   public static ObjectMapper createMapper() {
     return new JacksonConfig().objectMapper();
@@ -162,9 +164,18 @@ public class JacksonConfig {
           String.class,
           new StdScalarSerializer<String>(String.class, false) {
             @Override
-            public void serialize(String value, JsonGenerator gen, SerializerProvider provider)
-                throws IOException {
-              gen.writeString(trim(value));
+            @SneakyThrows
+            public void serialize(String value, JsonGenerator gen, SerializerProvider provider) {
+              gen.writeString(trimToNull(value));
+            }
+          });
+      addDeserializer(
+          String.class,
+          new StdScalarDeserializer<String>(String.class) {
+            @Override
+            @SneakyThrows
+            public String deserialize(JsonParser p, DeserializationContext ctxt) {
+              return trimToNull(p.getValueAsString());
             }
           });
     }
