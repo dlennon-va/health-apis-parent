@@ -307,6 +307,9 @@ public class IdMeOauthRobot {
     @JsonProperty("state")
     String state;
 
+    @JsonProperty("refresh_token")
+    String refreshToken;
+
     public boolean isError() {
       return isNotBlank(error) || isNotBlank(errorDescription);
     }
