@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+
+CURRENT_DIR=$(pwd)
+IT_ME=$(whoami)
+cd /tmp/
+
+aufWiedersehen() {
+  # Bringin' it back to the start
+  cd $CURRENT_DIR
+  echo "*** Restart for changes to take effect ***"
+  exit $1
+}
+
+# Sign-In
+sudo -v
+
+# =============== Install Java ===============
+echo "Installing Java..."
+
+JAVA_DIR='/usr/lib/jvm'
+
+sudo rm -r $JAVA_DIR/*
+
+if [ ${1:-12} -eq 8 ]
+then
+  JAVA_VERSION='jdk1.8.0_131'
+
+  wget -q --show-progress \
+    --header "Cookie: oraclelicense=accept-securebackup-cookie" \
+    http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz
+
+  tar -C $JAVA_DIR -xf jdk-8u131-linux-x64.tar.gz
+else
+  JAVA_VERSION='jdk-12.0.1'
+
+  wget -q --show-progress \
+    --no-cookies \
+    --no-check-certificate \
+    --header "Cookie: oraclelicense=accept-securebackup-cookie" \
+    https://download.oracle.com/otn-pub/java/jdk/12.0.1+12/69cfe15208a647278a19ef0990eea691/jdk-12.0.1_linux-x64_bin.deb
+
+  sudo dpkg -i -a jdk-12.0.1_linux-x64_bin.deb
+fi
+
+export JAVA_HOME="$JAVA_DIR/$JAVA_VERSION"
+
+sudo update-alternatives --install /usr/bin/java java "$JAVA_HOME/bin/java" 2
+sudo update-alternatives --config java
+
+sudo update-alternatives --install /usr/bin/jar jar "$JAVA_HOME/bin/jar" 2
+sudo update-alternatives --install /usr/bin/javac javac "$JAVA_HOME/bin/javac" 2
+sudo update-alternatives --set jar "$JAVA_HOME/bin/jar"
+sudo update-alternatives --set javac "$JAVA_HOME/bin/javac"
+
+# We need to own the jdk so that `trust-dev-certs.sh` will run correctly
+sudo chown --recursive $IT_ME:$IT_ME $JAVA_DIR
+
+# Check for JDK
+JDK_AVAIL=$(ls $JAVA_DIR | grep -o -c $JAVA_VERSION)
+
+if [ $JDK_AVAIL -lt 1 ]
+then
+  echo "Can't find jdk ($JAVA_VERSION) in $JAVA_DIR"
+  aufWiedersehen 1
+fi
+
+export JAVA_HOME="$JAVA_DIR/$JAVA_VERSION"
+echo "export JAVA_HOME=\"$JAVA_HOME\"" >> ~/.profile
+
+java -version
+
+# =============== Install Maven ===============
+echo "========================="
+echo "Installing Maven 3.5.4..."
+
+command -v mvn >/dev/null
+if [ $? -eq 0 ]
+then
+  echo "Maven already installed!"
+  echo "export PATH=\"$PATH:$JAVA_HOME/bin\"" >> ~/.profile
+  mvn --version
+  echo "========================="
+  aufWiedersehen 0
+fi
+
+wget -q --show-progress \
+  --no-cookies \
+  --no-check-certificate \
+https://archive.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz
+
+APACHE_DIR='/usr/lib/apache'
+sudo mkdir $APACHE_DIR
+tar -C $APACHE_DIR -xf apache-maven-3.5.4-bin.tar.gz
+
+export MAVEN_HOME="$APACHE_DIR/apache-maven-3.5.4"
+echo "M2_HOME=\"$MAVEN_HOME\"" >> ~/.profile
+echo "MAVEN_HOME=\"$MAVEN_HOME\"" >> ~/.profile
+
+mvn --version
+
+echo "========================="
+
+echo "export PATH=\"$PATH:$JAVA_HOME/bin:$MAVEN_HOME/bin\"" >> ~/.profile
+
+aufWiedersehen 0
