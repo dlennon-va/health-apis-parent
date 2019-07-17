@@ -12,9 +12,10 @@
   <version>2.0.11-SNAPSHOT</version>
   <packaging>pom</packaging>
   <properties>
-    <cdw-schemas.version>1.0.42</cdw-schemas.version>
     <checkstyle.version>8.19</checkstyle.version>
     <findsecbugs-plugin.version>1.8.0</findsecbugs-plugin.version>
+    <fixcrlf.excludes>**/*.png,**/*.jks,**/*.db</fixcrlf.excludes>
+    <fixcrlf.includes>pom.xml,*.md,src/**</fixcrlf.includes>
     <fmt-maven-plugin.version>2.3.0</fmt-maven-plugin.version>
     <formatter-maven-plugin.version>2.7.5</formatter-maven-plugin.version>
     <git.allowedBranchNames><![CDATA[^(master|release/.*|PR-[0-9]+|.*/[A-Z]{2,3}-[0-9]+-.*)$]]></git.allowedBranchNames>
@@ -67,21 +68,6 @@
         <artifactId>lighthouse-keystore</artifactId>
         <version>${lighthouse-keystore.version}</version>
         <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>gov.va.dvp</groupId>
-        <artifactId>cdw-schemas</artifactId>
-        <version>${cdw-schemas.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.mule.modules</groupId>
-            <artifactId>mule-module-objectstore</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.mulesoft.security</groupId>
-            <artifactId>mule-module-security-property-placeholder</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -281,7 +267,7 @@
                 <phase>process-sources</phase>
                 <configuration>
                   <target>
-                    <fixcrlf eof="remove" eol="lf" excludes="**/*.png,**/*.jks" includes="pom.xml,*.md,src/**" srcDir="${project.basedir}"/>
+                    <fixcrlf eof="remove" eol="lf" excludes="${fixcrlf.excludes}" includes="${fixcrlf.includes}" srcDir="${project.basedir}"/>
                   </target>
                 </configuration>
                 <goals>
