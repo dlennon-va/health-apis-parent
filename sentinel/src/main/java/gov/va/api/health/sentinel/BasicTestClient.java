@@ -3,6 +3,8 @@ package gov.va.api.health.sentinel;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.restassured.http.Method;
+import java.util.Collections;
+import java.util.Map;
 import java.util.function.Supplier;
 import lombok.Builder;
 import lombok.Value;
@@ -23,10 +25,16 @@ public final class BasicTestClient implements TestClient {
 
   @Override
   public ExpectedResponse get(String path, String... params) {
+    return get(null, path, params);
+  }
+
+  @Override
+  public ExpectedResponse get(Map<String, String> maybeHeaders, String path, String... params) {
     return ExpectedResponse.of(
         service()
             .requestSpecification()
             .contentType(contentType())
+            .headers(maybeHeaders == null ? Collections.emptyMap() : maybeHeaders)
             .request()
             .request(Method.GET, path, (Object[]) params));
   }

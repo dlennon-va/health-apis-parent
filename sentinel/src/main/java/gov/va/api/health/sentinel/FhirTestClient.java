@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.restassured.http.Method;
 import io.restassured.response.Response;
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -39,12 +41,17 @@ public final class FhirTestClient implements TestClient {
   Supplier<ObjectMapper> mapper;
 
   @Override
-  @SneakyThrows
   public ExpectedResponse get(String path, String... params) {
+    return get(null, path, params);
+  }
+
+  @Override
+  @SneakyThrows
+  public ExpectedResponse get(Map<String, String> headers, String path, String... params) {
     Future<Response> baselineResponseFuture =
         executorService.submit(
             () -> {
-              return get("application/json", path, params);
+              return get(headers, "application/json", path, params);
             });
 
     if (path.startsWith("/actuator")) {
@@ -55,12 +62,12 @@ public final class FhirTestClient implements TestClient {
     Future<Response> fhirJsonResponseFuture =
         executorService.submit(
             () -> {
-              return get("application/fhir+json", path, params);
+              return get(headers, "application/fhir+json", path, params);
             });
     Future<Response> jsonFhirResponseFuture =
         executorService.submit(
             () -> {
-              return get("application/json+fhir", path, params);
+              return get(headers, "application/json+fhir", path, params);
             });
 
     final Response baselineResponse = baselineResponseFuture.get(5, TimeUnit.MINUTES);
@@ -104,7 +111,8 @@ public final class FhirTestClient implements TestClient {
     return ExpectedResponse.of(baselineResponse);
   }
 
-  private Response get(String contentType, String path, Object[] params) {
+  private Response get(
+      Map<String, String> maybeHeaders, String contentType, String path, Object[] params) {
     Response response = null;
 
     // We'll make the request at least one time and as many as maxAttempts if we get a 500 error.
@@ -119,6 +127,7 @@ public final class FhirTestClient implements TestClient {
               .requestSpecification()
               .contentType(contentType)
               .accept(contentType)
+              .headers(maybeHeaders == null ? Collections.emptyMap() : maybeHeaders)
               .request(Method.GET, path, params);
 
       if (response.getStatusCode() != 500) {
