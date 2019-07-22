@@ -48,12 +48,18 @@ import_certificate_from_url () {
     -keystore "$TRUST_STORE" \
     -storepass "$TRUST_STORE_PASSWORD" \
     -noprompt
+
+  # Remove the printed certs after adding to cacerts
+  rm $1.pem
 }
 
 cd $(dirname $0)/../..
 
 [ -z "$JAVA_HOME" ] && echo "JAVA_HOME not set" && exit 1
 [ -z "$HEALTH_API_CERTIFICATE_PASSWORD" ] && echo "HEALTH_API_CERTIFICATE_PASSWORD not set" && exit 1
+# cacerts in newer jdks can be in a different place so we'll check that first
+[ -f "$JAVA_HOME/lib/security/cacerts" ] && TRUST_STORE="$JAVA_HOME/lib/security/cacerts"
+# Set TRUST_STORE to the default and test again
 [ -z "$TRUST_STORE" ] && TRUST_STORE="$JAVA_HOME/jre/lib/security/cacerts"
 [ ! -f "$TRUST_STORE" ] && echo "Trust store not found: $TRUST_STORE" && exit 1
 [ -z "$TRUST_STORE_PASSWORD" ] && TRUST_STORE_PASSWORD=changeit
