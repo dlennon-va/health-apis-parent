@@ -9,6 +9,7 @@ import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.Authorization;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.Authorization.AuthorizationBuilder;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.UserCredentials;
+import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.OAuthCredentialsMode;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.TokenExchange;
 import io.restassured.RestAssured;
 import java.io.BufferedReader;
@@ -17,6 +18,7 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -40,7 +42,7 @@ public class LabBot {
 
   List<String> scopes;
 
-  Config labConfig;
+  Config config;
 
   List<String> userIds;
 
@@ -55,7 +57,7 @@ public class LabBot {
   public LabBot(List<String> scopes, List<String> userIds, String configFile) {
     this.scopes = scopes;
     this.userIds = userIds;
-    labConfig = new LabBot.Config(configFile);
+    config = new LabBot.Config(configFile);
   }
 
   /** Gets all Lab users. */
@@ -73,12 +75,12 @@ public class LabBot {
   private Authorization makeAuthorization(SmartOnFhirUrls urls) {
     AuthorizationBuilder authorizationBuilder = Authorization.builder();
     authorizationBuilder
-        .clientId(labConfig.clientId())
-        .clientSecret(labConfig.clientSecret())
+        .clientId(config.clientId())
+        .clientSecret(config.clientSecret())
         .authorizeUrl(urls.authorize())
-        .redirectUrl(labConfig.redirectUrl())
-        .state(labConfig.state())
-        .aud(labConfig.aud());
+        .redirectUrl(config.redirectUrl())
+        .state(config.state())
+        .aud(config.aud());
     for (String scope : scopes) {
       authorizationBuilder.scope(scope);
     }
@@ -92,7 +94,8 @@ public class LabBot {
    * @param userCredentials Credentials for the user to perform operations against.
    * @param baseUrl URLs to perform operations against.
    */
-  public IdMeOauthRobot makeLabBot(UserCredentials userCredentials, String baseUrl) {
+  public IdMeOauthRobot makeLabBot(
+      UserCredentials userCredentials, String baseUrl, OAuthCredentialsMode credentialsMode) {
     SmartOnFhirUrls urls = new SmartOnFhirUrls(baseUrl);
     Authorization authorization = makeAuthorization(urls);
     Configuration configuration =
@@ -100,11 +103,11 @@ public class LabBot {
             .authorization(authorization)
             .tokenUrl(urls.token())
             .user(userCredentials)
-            .chromeDriver(labConfig.driver())
-            .headless(labConfig.headless())
+            .chromeDriver(config.driver())
+            .headless(config.headless())
+            .credentialsMode(credentialsMode)
             .build();
-    IdMeOauthRobot bot = IdMeOauthRobot.of(configuration);
-    return bot;
+    return IdMeOauthRobot.of(configuration);
   }
 
   /**
@@ -125,7 +128,7 @@ public class LabBot {
           ex.submit(
               () -> {
                 try {
-                  URL baseUrl = new URL(labConfig.baseUrl());
+                  URL baseUrl = new URL(config.baseUrl());
                   URL url =
                       new URL(
                           baseUrl.getProtocol(),
@@ -137,7 +140,8 @@ public class LabBot {
                   con.setRequestMethod("GET");
                   log.info("Sending request to: " + url.toString());
                   BufferedReader br =
-                      new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
+                      new BufferedReader(
+                          new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8));
                   responseUserResultList.add(
                       new LabBotUserResult(
                           tokenUserResult.user, tokenUserResult.tokenExchange, br.readLine()));
@@ -164,25 +168,32 @@ public class LabBot {
         });
   }
 
-  /** Returns tokens for each user. */
+  /**
+   * Returns tokens for each user. Alternates between sending {client-id}:{client-secret} as a
+   * header, or in the request body.
+   */
   @SneakyThrows
   public List<LabBotUserResult> tokens() {
     List<LabBotUserResult> labBotUserResultList = new CopyOnWriteArrayList<>();
     ExecutorService ex = Executors.newFixedThreadPool(10);
     List<Future<?>> futures = new ArrayList<>(userIds.size());
+    int counter = 0;
     for (String userId : userIds) {
+      final OAuthCredentialsMode credentialsMode = counter % 2 == 0 ? OAuthCredentialsMode.HEADER : OAuthCredentialsMode.REQUEST_BODY;
       futures.add(
           ex.submit(
               () -> {
                 UserCredentials userCredentials =
-                    UserCredentials.builder().id(userId).password(labConfig.userPassword()).build();
-                IdMeOauthRobot bot = makeLabBot(userCredentials, labConfig.baseUrl());
+                    UserCredentials.builder().id(userId).password(config.userPassword()).build();
+                IdMeOauthRobot bot =
+                    makeLabBot(userCredentials, config.baseUrl(), credentialsMode);
                 labBotUserResultList.add(
                     LabBotUserResult.builder()
                         .user(userCredentials)
                         .tokenExchange(bot.token())
                         .build());
               }));
+      counter++;
     }
     results(ex, futures);
     return labBotUserResultList;
@@ -192,40 +203,35 @@ public class LabBot {
 
     private Properties properties;
 
-    private String env;
-
     @SneakyThrows
     Config(String pathname) {
       File file = new File(pathname);
-      int slashIndex = file.toString().lastIndexOf('\\');
-      int dotIndex = file.toString().lastIndexOf('.');
-      env = file.toString().substring(slashIndex + 1, dotIndex);
       if (file.exists()) {
-        log.info("Loading {} properties from: {}", env, file);
+        log.info("Loading properties from: {}", file);
         properties = new Properties(System.getProperties());
         try (FileInputStream inputStream = new FileInputStream(file)) {
           properties.load(inputStream);
         }
       } else {
-        log.info("{} properties not found: {}, using System properties", env, file);
+        log.info("Properties not found: {}, using System properties", file);
         properties = System.getProperties();
       }
     }
 
     String aud() {
-      return valueOf(env + ".aud");
+      return valueOf("aud");
     }
 
     String baseUrl() {
-      return valueOf(env + ".base-url");
+      return valueOf("base-url");
     }
 
     String clientId() {
-      return valueOf(env + ".client-id");
+      return valueOf("client-id");
     }
 
     String clientSecret() {
-      return valueOf(env + ".client-secret");
+      return valueOf("client-secret");
     }
 
     String driver() {
@@ -237,15 +243,15 @@ public class LabBot {
     }
 
     String redirectUrl() {
-      return valueOf(env + ".redirect-url");
+      return valueOf("redirect-url");
     }
 
     String state() {
-      return valueOf(env + ".state");
+      return valueOf("state");
     }
 
     String userPassword() {
-      return valueOf(env + ".user-password");
+      return valueOf("user-password");
     }
 
     private String valueOf(String name) {

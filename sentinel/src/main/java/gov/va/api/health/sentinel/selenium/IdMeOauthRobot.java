@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import io.restassured.specification.RequestSpecification;
 import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.Optional;
@@ -37,6 +38,7 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 @Slf4j
 @RequiredArgsConstructor(staticName = "of")
 public class IdMeOauthRobot {
+
   @Getter @NonNull private final Configuration config;
 
   private String code;
@@ -106,10 +108,8 @@ public class IdMeOauthRobot {
     if (code != null) {
       return code;
     }
-
     WebDriver driver = createWebDriver();
     try {
-
       String url = driver.getCurrentUrl();
       enterCredentials(driver);
       checkForBadCredentials(driver);
@@ -122,7 +122,6 @@ public class IdMeOauthRobot {
       checkForConsentForm(driver);
       checkForConsentForm(driver);
       checkForMatchingError(driver);
-
       code = extractCodeFromRedirectUrl(driver);
       log.info("Code: {}", code);
       return code;
@@ -143,7 +142,6 @@ public class IdMeOauthRobot {
     if (isNotBlank(config.chromeDriver())) {
       System.setProperty("webdriver.chrome.driver", config.chromeDriver());
     }
-
     WebDriver driver = new ChromeDriver(chromeOptions);
     driver.manage().timeouts().implicitlyWait(1, TimeUnit.SECONDS);
     return driver;
@@ -167,7 +165,6 @@ public class IdMeOauthRobot {
         .until(ExpectedConditions.urlContains(config.authorization().redirectUrl()));
     String url = driver.getCurrentUrl();
     log.info("Redirected {}", url);
-
     return Arrays.stream(url.split("\\?")[1].split("&"))
         .filter(p -> p.startsWith("code="))
         .findFirst()
@@ -189,12 +186,25 @@ public class IdMeOauthRobot {
     if (token != null) {
       return token;
     }
-    log.info("Exchanging authorization code for token");
+    RequestSpecification request;
+    if (config.credentialsMode == OAuthCredentialsMode.HEADER) {
+      log.info("Exchanging authorization code for token using basic authorization header");
+      request =
+          RestAssured.given()
+              .contentType(ContentType.URLENC.withCharset("UTF-8"))
+              .auth()
+              .preemptive()
+              .basic(config.authorization().clientId(), config.authorization().clientSecret());
+    } else {
+      log.info("Exchanging authorization code for token using basic authorization in request body");
+      request =
+          RestAssured.given()
+              .contentType(ContentType.URLENC.withCharset("UTF-8"))
+              .formParam("client_id", config.authorization().clientId())
+              .formParam("client_secret", config.authorization().clientSecret());
+    }
     token =
-        RestAssured.given()
-            .contentType(ContentType.URLENC.withCharset("UTF-8"))
-            .formParam("client_id", config.authorization().clientId())
-            .formParam("client_secret", config.authorization().clientSecret())
+        request
             .formParam("grant_type", "authorization_code")
             .formParam("redirect_uri", config.authorization().redirectUrl())
             .formParam("code", code())
@@ -229,25 +239,43 @@ public class IdMeOauthRobot {
     return driver.getCurrentUrl();
   }
 
+  public enum OAuthCredentialsMode {
+    HEADER,
+    REQUEST_BODY
+  }
+
   @Value
   @Builder
   public static class Configuration {
 
     @NonNull Authorization authorization;
+
     @NonNull String tokenUrl;
+
     @NonNull UserCredentials user;
+
     @Default boolean headless = true;
+
+    @Default OAuthCredentialsMode credentialsMode = OAuthCredentialsMode.HEADER;
+
     String chromeDriver;
 
     @Value
     @Builder
     public static class Authorization {
+
       @NonNull String authorizeUrl;
+
       @NonNull String redirectUrl;
+
       @NonNull String clientId;
+
       @NonNull String clientSecret;
+
       @NonNull String state;
+
       @NonNull String aud;
+
       @Singular Set<String> scopes;
 
       @SneakyThrows
@@ -270,7 +298,9 @@ public class IdMeOauthRobot {
     @Value
     @Builder
     public static class UserCredentials {
+
       @NonNull String id;
+
       @NonNull String password;
     }
   }
