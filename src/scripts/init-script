@@ -2,101 +2,145 @@
 
 CURRENT_DIR=$(pwd)
 IT_ME=$(whoami)
-cd /tmp/
 
+# Buh Bye
 aufWiedersehen() {
   # Bringin' it back to the start
-  cd $CURRENT_DIR
+  # $1 - the exit code
+  cd "$CURRENT_DIR"
   echo "*** Restart for changes to take effect ***"
   exit $1
 }
 
-# Sign-In
-sudo -v
+getArchive() {
+  # $1 - Will be the url to download from
+  # $2 - should be any extra wget params we want
+  # $3 - should be the expected beginning of archive
+  wget -q \
+    --no-check-certificate \
+    $2 \
+    $1
 
-# =============== Install Java ===============
-echo "Installing Java..."
+  # The name of the file
+  ARCHIVE=$(echo $1 | grep -o -E "$3")
+  [ -z "$ARCHIVE" ] && echo "Can't determine archive name: $ARCHIVE" && exit 1
+}
 
-JAVA_DIR='/usr/lib/jvm'
+checkAvailibility() {
+  # $1 - Will be a directory
+  # $2 - Will be a file name
+  if [ $(ls "$1" | grep -o -c $2) -lt 1 ]
+  then
+    echo "Can't find ($2) in $1"
+    aufWiedersehen 1
+  fi
+}
 
-sudo rm -r $JAVA_DIR/*
+# =============== Get and Set thing for Java ===============
+getJava() {
+  echo "Installing Java..."
 
-if [ ${1:-12} -eq 8 ]
-then
-  JAVA_VERSION='jdk1.8.0_131'
-
-  wget -q --show-progress \
-    --header "Cookie: oraclelicense=accept-securebackup-cookie" \
-    http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz
-
-  tar -C $JAVA_DIR -xf jdk-8u131-linux-x64.tar.gz
-else
   JAVA_VERSION='jdk-12.0.2'
 
-  wget -q --show-progress \
-    https://download.java.net/java/GA/jdk12.0.2/e482c34c86bd4bf8b56c0b35558996b9/10/GPL/openjdk-12.0.2_linux-x64_bin.tar.gz
+  [ -d "$JAVA_DIR/*" ] && $SUDO rm -r "$JAVA_DIR/*"
 
-  tar -C $JAVA_DIR -xf openjdk-12.0.2_linux-x64_bin.tar.gz
-fi
+  getArchive $1 '--header "Cookie: oraclelicense=accept-securebackup-cookie"' 'openjdk.*$'
 
-export JAVA_HOME="$JAVA_DIR/$JAVA_VERSION"
-
-sudo update-alternatives --install /usr/bin/java java "$JAVA_HOME/bin/java" 2
-sudo update-alternatives --config java
-
-sudo update-alternatives --install /usr/bin/jar jar "$JAVA_HOME/bin/jar" 2
-sudo update-alternatives --install /usr/bin/javac javac "$JAVA_HOME/bin/javac" 2
-sudo update-alternatives --set jar "$JAVA_HOME/bin/jar"
-sudo update-alternatives --set javac "$JAVA_HOME/bin/javac"
-
-# We need to own the jdk so that `trust-dev-certs.sh` will run correctly
-sudo chown --recursive $IT_ME:$IT_ME $JAVA_DIR
-
-# Check for JDK
-JDK_AVAIL=$(ls $JAVA_DIR | grep -o -c $JAVA_VERSION)
-
-if [ $JDK_AVAIL -lt 1 ]
-then
-  echo "Can't find jdk ($JAVA_VERSION) in $JAVA_DIR"
-  aufWiedersehen 1
-fi
-
-export JAVA_HOME="$JAVA_DIR/$JAVA_VERSION"
-echo "export JAVA_HOME=\"$JAVA_HOME\"" >> ~/.profile
-
-java -version
+  HOME_JAVA="$JAVA_DIR/$JAVA_VERSION"
+}
 
 # =============== Install Maven ===============
-echo "========================="
-echo "Installing Maven 3.6.1..."
-
-command -v mvn >/dev/null
-if [ $? -eq 0 ]
-then
-  echo "Maven already installed! Check version and reinstall if upgrade is necessary."
-  echo "export PATH=\"$PATH:$JAVA_HOME/bin\"" >> ~/.profile
-  mvn --version
+installMvn() {
   echo "========================="
+  echo "Installing Maven 3.6.1..."
+
+  command -v mvn >/dev/null
+  if [ $? -eq 0 ]
+  then
+    echo "Maven already installed! Check version and reinstall if upgrade is necessary."
+    mvn --version
+    echo "========================="
+    aufWiedersehen 1
+  fi
+
+  getArchive http://mirrors.ibiblio.org/apache/maven/maven-3/3.6.1/binaries/apache-maven-3.6.1-bin.tar.gz '--no-cookies' 'apache-maven-3.6.1.*$'
+
+  HOME_MAVEN="$APACHE_DIR/apache-maven-3.6.1"
+  [ ! -d "$APACHE_DIR" ] && $SUDO mkdir "$APACHE_DIR"
+  [ -d "$HOME_MAVEN" ] && $SUDO rm -r "$HOME_MAVEN"
+  $SUDO tar -C "$APACHE_DIR" -xf $ARCHIVE
+}
+
+# Determining OS Type
+# Linux
+if [ "$OSTYPE" == "linux-gnu" ]
+then
+  SUDO='sudo'
+  sudo -v
+  cd /tmp/
+  JAVA_DOWNLOAD='https://download.java.net/java/GA/jdk12.0.2/e482c34c86bd4bf8b56c0b35558996b9/10/GPL/openjdk-12.0.2_linux-x64_bin.tar.gz'
+  JAVA_DIR='/usr/lib/jvm'
+  APACHE_DIR='/usr/lib/apache'
+
+  # We doin a Java install
+  getJava $JAVA_DOWNLOAD
+  sudo tar -C $JAVA_DIR -xf $ARCHIVE
+
+  checkAvailibility $JAVA_DIR $JAVA_VERSION
+
+  # We need to own the jdk so that `trust-dev-certs.sh` will run correctly
+  sudo chown --recursive $IT_ME:$IT_ME "$JAVA_DIR"
+
+  echo "export JAVA_HOME=\"$HOME_JAVA\"" >> ~/.profile
+
+  sudo update-alternatives --install /usr/bin/java java "$JAVA_HOME/bin/java" 2
+  sudo update-alternatives --config java
+
+  sudo update-alternatives --install /usr/bin/jar jar "$JAVA_HOME/bin/jar" 2
+  sudo update-alternatives --install /usr/bin/javac javac "$JAVA_HOME/bin/javac" 2
+  sudo update-alternatives --set jar "$JAVA_HOME/bin/jar"
+  sudo update-alternatives --set javac "$JAVA_HOME/bin/javac"
+
+  # Installin Maven
+  installMvn
+  if [ $? -eq 1 ]
+  then
+    echo "export PATH=\"$PATH:$HOME_JAVA/bin\"" >> ~/.profile
+  else
+    echo "export M2_HOME=\"$HOME_MAVEN\"" >> ~/.profile
+    echo "export MAVEN_HOME=\"$HOME_MAVEN\"" >> ~/.profile
+    echo "export PATH=\"$PATH:$HOME_JAVA/bin:$HOME_MAVEN/bin\"" >> ~/.profile
+  fi
+
+  echo "Maven Install Complete"
   aufWiedersehen 0
+# Windows
+# MUST BE RUNNING AS ADMIN
+elif [ "$OSTYPE" == "msys" ]
+then
+
+  command -v unzip >/dev/null
+  [ $? -eq 1 ] && echo "Command not found: unzip" && exit 1
+  cd ~/Downloads/
+  JAVA_DOWNLOAD='https://download.java.net/java/GA/jdk12.0.2/e482c34c86bd4bf8b56c0b35558996b9/10/GPL/openjdk-12.0.2_windows-x64_bin.zip'
+  JAVA_DIR='/c/Program Files/Java'
+  APACHE_DIR='/c/Program Files/Apache'
+  getJava $JAVA_DOWNLOAD
+  yes | unzip -qq $ARCHIVE -d "$JAVA_DIR"
+  setx JAVA_HOME "$HOME_JAVA"
+  installMvn
+  if [ $? -eq 1 ]
+  then
+    setx path "%path%;$PATH:$HOME_JAVA/bin"
+  else
+    setx M2_HOME "$HOME_MAVEN"
+    setx MAVEN_HOME "$HOME_MAVEN"
+    setx path "%path%;$HOME_JAVA/bin;$HOME_MAVEN/bin"
+  fi
+
+  echo "Maven Install Complete"
+  aufWiedersehen 0
+else
+  echo "Can't determine OS: $OSTYPE"
+  exit 1
 fi
-
-wget -q --show-progress \
-  --no-cookies \
-  --no-check-certificate \
-  http://mirrors.ibiblio.org/apache/maven/maven-3/3.6.1/binaries/apache-maven-3.6.1-bin.tar.gz
-
-APACHE_DIR='/usr/lib/apache'
-sudo mkdir $APACHE_DIR
-tar -C $APACHE_DIR -xf apache-maven-3.6.1-bin.tar.gz
-
-export MAVEN_HOME="$APACHE_DIR/apache-maven-3.6.1"
-echo "M2_HOME=\"$MAVEN_HOME\"" >> ~/.profile
-echo "MAVEN_HOME=\"$MAVEN_HOME\"" >> ~/.profile
-
-mvn --version
-
-echo "========================="
-
-echo "export PATH=\"$PATH:$JAVA_HOME/bin:$MAVEN_HOME/bin\"" >> ~/.profile
-
-aufWiedersehen 0
