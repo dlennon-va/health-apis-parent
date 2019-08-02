@@ -179,14 +179,14 @@ public class LabBot {
     List<Future<?>> futures = new ArrayList<>(userIds.size());
     int counter = 0;
     for (String userId : userIds) {
-      final OAuthCredentialsMode credentialsMode = counter % 2 == 0 ? OAuthCredentialsMode.HEADER : OAuthCredentialsMode.REQUEST_BODY;
+      final OAuthCredentialsMode credentialsMode =
+          counter % 2 == 0 ? OAuthCredentialsMode.HEADER : OAuthCredentialsMode.REQUEST_BODY;
       futures.add(
           ex.submit(
               () -> {
                 UserCredentials userCredentials =
                     UserCredentials.builder().id(userId).password(config.userPassword()).build();
-                IdMeOauthRobot bot =
-                    makeLabBot(userCredentials, config.baseUrl(), credentialsMode);
+                IdMeOauthRobot bot = makeLabBot(userCredentials, config.baseUrl(), credentialsMode);
                 labBotUserResultList.add(
                     LabBotUserResult.builder()
                         .user(userCredentials)
