@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.io.CharStreams;
+import gov.va.api.health.sentinel.LabBot.LabBotUserResult.LabBotUserResultBuilder;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.Authorization;
@@ -12,7 +14,6 @@ import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.UserCred
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.OAuthCredentialsMode;
 import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.TokenExchange;
 import io.restassured.RestAssured;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
@@ -29,7 +30,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import lombok.AccessLevel;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.Value;
@@ -40,11 +43,12 @@ import org.apache.commons.lang3.BooleanUtils;
 @Value
 public class LabBot {
 
-  List<String> scopes;
+  @NonNull List<String> scopes;
 
+  @Getter(AccessLevel.PRIVATE)
   Config config;
 
-  List<String> userIds;
+  @NonNull List<String> userIds;
 
   /**
    * Builds what is required by LabBot.
@@ -54,7 +58,8 @@ public class LabBot {
    * @param configFile configFile that LabBot grabs its configuration properties from
    */
   @Builder
-  public LabBot(List<String> scopes, List<String> userIds, String configFile) {
+  public LabBot(
+      @NonNull List<String> scopes, @NonNull List<String> userIds, @NonNull String configFile) {
     this.scopes = scopes;
     this.userIds = userIds;
     config = new LabBot.Config(configFile);
@@ -94,7 +99,7 @@ public class LabBot {
    * @param userCredentials Credentials for the user to perform operations against.
    * @param baseUrl URLs to perform operations against.
    */
-  public IdMeOauthRobot makeLabBot(
+  private IdMeOauthRobot makeLabBot(
       UserCredentials userCredentials, String baseUrl, OAuthCredentialsMode credentialsMode) {
     SmartOnFhirUrls urls = new SmartOnFhirUrls(baseUrl);
     Authorization authorization = makeAuthorization(urls);
@@ -123,31 +128,42 @@ public class LabBot {
     List<LabBotUserResult> responseUserResultList = new CopyOnWriteArrayList<>();
     ExecutorService ex = Executors.newFixedThreadPool(10);
     List<Future<?>> futures = new ArrayList<>(userIds.size());
-    for (LabBotUserResult tokenUserResult : tokenUserResultList) {
+    for (LabBotUserResult tokenResult : tokenUserResultList) {
       futures.add(
           ex.submit(
               () -> {
+                LabBotUserResultBuilder resultBuilder =
+                    LabBotUserResult.builder()
+                        .user(tokenResult.user())
+                        .tokenExchange(tokenResult.tokenExchange());
                 try {
                   URL baseUrl = new URL(config.baseUrl());
                   URL url =
                       new URL(
                           baseUrl.getProtocol(),
                           baseUrl.getHost(),
-                          path.replace("{icn}", tokenUserResult.tokenExchange.patient()));
+                          path.replace("{icn}", tokenResult.tokenExchange.patient()));
                   HttpURLConnection con = (HttpURLConnection) url.openConnection();
                   con.setRequestProperty(
-                      "Authorization", "Bearer " + tokenUserResult.tokenExchange.accessToken());
+                      "Authorization", "Bearer " + tokenResult.tokenExchange.accessToken());
                   con.setRequestMethod("GET");
                   log.info("Sending request to: " + url.toString());
-                  BufferedReader br =
-                      new BufferedReader(
-                          new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8));
-                  responseUserResultList.add(
-                      new LabBotUserResult(
-                          tokenUserResult.user, tokenUserResult.tokenExchange, br.readLine()));
-                  br.close();
+
+                  try (var reader =
+                      new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8)) {
+                    resultBuilder.response(CharStreams.toString(reader));
+                  }
                 } catch (Exception e) {
-                  log.error(e.getMessage(), e.getCause());
+                  log.error(
+                      "Request failure {} {}: {}",
+                      tokenResult.user(),
+                      path,
+                      e.getMessage(),
+                      e.getCause());
+                  resultBuilder.response(
+                      "ERROR: " + e.getClass().getName() + ": " + e.getMessage());
+                } finally {
+                  responseUserResultList.add(resultBuilder.build());
                 }
               }));
     }
@@ -174,26 +190,30 @@ public class LabBot {
    */
   @SneakyThrows
   public List<LabBotUserResult> tokens() {
+    /*
+     * Make necessary configuration is available.
+     */
+    config().baseUrl();
+    config().userPassword();
+    config().aud();
+    config().redirectUrl();
     List<LabBotUserResult> labBotUserResultList = new CopyOnWriteArrayList<>();
     ExecutorService ex = Executors.newFixedThreadPool(10);
     List<Future<?>> futures = new ArrayList<>(userIds.size());
-    int counter = 0;
     for (String userId : userIds) {
-      final OAuthCredentialsMode credentialsMode =
-          counter % 2 == 0 ? OAuthCredentialsMode.HEADER : OAuthCredentialsMode.REQUEST_BODY;
       futures.add(
           ex.submit(
               () -> {
                 UserCredentials userCredentials =
                     UserCredentials.builder().id(userId).password(config.userPassword()).build();
-                IdMeOauthRobot bot = makeLabBot(userCredentials, config.baseUrl(), credentialsMode);
+                IdMeOauthRobot bot =
+                    makeLabBot(userCredentials, config.baseUrl(), config().credentialsMode());
                 labBotUserResultList.add(
                     LabBotUserResult.builder()
                         .user(userCredentials)
                         .tokenExchange(bot.token())
                         .build());
               }));
-      counter++;
     }
     results(ex, futures);
     return labBotUserResultList;
@@ -219,19 +239,23 @@ public class LabBot {
     }
 
     String aud() {
-      return valueOf("aud");
+      return valueOf("lab.aud");
     }
 
     String baseUrl() {
-      return valueOf("base-url");
+      return valueOf("lab.base-url");
     }
 
     String clientId() {
-      return valueOf("client-id");
+      return valueOf("lab.client-id");
     }
 
     String clientSecret() {
-      return valueOf("client-secret");
+      return valueOf("lab.client-secret");
+    }
+
+    OAuthCredentialsMode credentialsMode() {
+      return OAuthCredentialsMode.valueOf(valueOf("lab.credentials-mode"));
     }
 
     String driver() {
@@ -243,15 +267,15 @@ public class LabBot {
     }
 
     String redirectUrl() {
-      return valueOf("redirect-url");
+      return valueOf("lab.redirect-url");
     }
 
     String state() {
-      return valueOf("state");
+      return valueOf("lab.state");
     }
 
     String userPassword() {
-      return valueOf("user-password");
+      return valueOf("lab.user-password");
     }
 
     private String valueOf(String name) {
