@@ -4,7 +4,7 @@ This project provides starter POMs and shared libraries for Health APIs
 [Spring Boot](https://spring.io/projects/spring-boot) microservices.
 - api-starter - Parent POM for service APIs
 - service-starter - Parent POM for service implementations
-- service-auto-config - Service configuration utilities
+- [service-auto-config](service-auto-config/README.md) - Service configuration utilities
 - [sentinel](sentinel/README.md) - Integration test harness
 
 ----

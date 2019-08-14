@@ -21,6 +21,11 @@ import org.springframework.test.context.junit4.SpringRunner;
 public class AutoConfigurationTest {
   @Autowired TestRestTemplate rest;
 
+  @Test(expected = RuntimeException.class)
+  public void boom() {
+    rest.getForEntity("/boom", Fugazi.class);
+  }
+
   @Test
   public void jacksonIsEnabled() {
     log.info("{}", Fugazi.FugaziBuilder.class.getName());
