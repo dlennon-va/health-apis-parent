@@ -22,4 +22,4 @@ JUnit categories are used to control which integration tests are executed.
 ##### Selenium
 Sentinel provides several Selenium-based tools.
 - `DevApiPortal` provides access to the developer API portal page.
-- `IdMeOauthRobot` is a robot user that can click through all of the authentication prompts.
+- `VaOauthRobot` is a robot user that can click through all of the authentication prompts.

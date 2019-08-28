@@ -11,6 +11,7 @@ import io.restassured.specification.RequestSpecification;
 import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -37,7 +38,7 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 
 @Slf4j
 @RequiredArgsConstructor(staticName = "of")
-public class IdMeOauthRobot {
+public class VaOauthRobot {
 
   @Getter @NonNull private final Configuration config;
 
@@ -102,6 +103,33 @@ public class IdMeOauthRobot {
     waitForUrlToChange(driver, url);
   }
 
+  @SneakyThrows
+  private void clickThroughTwoFactorAndWaitForManualInputOfCode(WebDriver driver) {
+    log.info("Clicking through LEGIT two factor authorization");
+    String url = driver.getCurrentUrl();
+    // If the user has multiple paths for 2FA, default to phone
+    if (driver.findElements(By.id("sr_name_phone")).size() != 0) {
+      driver.findElement(By.id("sr_name_phone")).click();
+      log.info("Defaulting to phone 2FA path");
+    }
+    try {
+      driver.findElement(By.className("btn-primary")).click();
+      // If only application is setup for 2FA, this line will throw an exception and we can proceed
+      url = waitForUrlToChange(driver, url);
+      log.info("Selecting phone 2FA path");
+    } catch (Exception e) {
+      log.info("Selecting code generator app 2FA path");
+    }
+    try (Scanner scanner = new Scanner(System.in, "UTF-8")) {
+      System.out.print("Please enter the two-factor code: ");
+      String twoFactorAuthCode = scanner.nextLine();
+      WebElement enterCode = driver.findElement(By.id("multifactor_code"));
+      enterCode.sendKeys(twoFactorAuthCode);
+      driver.findElement(By.name("button")).click();
+      waitForUrlToChange(driver, url);
+    }
+  }
+
   /** Return the authorization code, logging in if necessary. */
   @SneakyThrows
   public String code() {
@@ -114,7 +142,11 @@ public class IdMeOauthRobot {
       enterCredentials(driver);
       checkForBadCredentials(driver);
       url = waitForUrlToChange(driver, url);
-      clickThroughFakeTwoFactorAuthentication(driver);
+      if (config.skipTwoFactorAuth) {
+        clickThroughFakeTwoFactorAuthentication(driver);
+      } else {
+        clickThroughTwoFactorAndWaitForManualInputOfCode(driver);
+      }
       /*
        * There are possibly two consent forms.
        */
@@ -150,14 +182,8 @@ public class IdMeOauthRobot {
   private void enterCredentials(WebDriver driver) {
     log.info("Loading {}", config.authorization().asUrl());
     driver.get(config.authorization().asUrl());
-    log.info("Using Id.me");
-    driver.findElement(By.className("idme-signin")).click();
-    log.info("Entering credentials");
-    WebElement userEmail = driver.findElement(By.id("user_email"));
-    userEmail.sendKeys(config.user().id());
-    WebElement userPassword = driver.findElement(By.id("user_password"));
-    userPassword.sendKeys(config.user().password());
-    driver.findElement(By.className("btn-primary")).click();
+
+    config.oauthLoginDriver().login(driver, config.user());
   }
 
   private String extractCodeFromRedirectUrl(WebDriver driver) {
@@ -244,6 +270,11 @@ public class IdMeOauthRobot {
     REQUEST_BODY
   }
 
+  public enum OAuthCredentialsType {
+    ID_ME,
+    MY_HEALTHE_VET
+  }
+
   @Value
   @Builder
   public static class Configuration {
@@ -259,6 +290,12 @@ public class IdMeOauthRobot {
     @Default OAuthCredentialsMode credentialsMode = OAuthCredentialsMode.HEADER;
 
     String chromeDriver;
+
+    @Default OAuthCredentialsType credentialsType = OAuthCredentialsType.ID_ME;
+
+    @Default boolean skipTwoFactorAuth = true;
+
+    @Getter private OauthLoginDriver oauthLoginDriver;
 
     @Value
     @Builder

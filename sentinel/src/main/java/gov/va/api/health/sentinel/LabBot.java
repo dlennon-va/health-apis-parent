@@ -6,13 +6,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
 import gov.va.api.health.sentinel.LabBot.LabBotUserResult.LabBotUserResultBuilder;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.Authorization;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.Authorization.AuthorizationBuilder;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.Configuration.UserCredentials;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.OAuthCredentialsMode;
-import gov.va.api.health.sentinel.selenium.IdMeOauthRobot.TokenExchange;
+import gov.va.api.health.sentinel.selenium.IdMeOauthLoginDriver;
+import gov.va.api.health.sentinel.selenium.MyHealtheVetOauthLoginDriver;
+import gov.va.api.health.sentinel.selenium.OauthLoginDriver;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.Configuration;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.Configuration.Authorization;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.Configuration.Authorization.AuthorizationBuilder;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.Configuration.UserCredentials;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.OAuthCredentialsMode;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.OAuthCredentialsType;
+import gov.va.api.health.sentinel.selenium.VaOauthRobot.TokenExchange;
 import io.restassured.RestAssured;
 import java.io.File;
 import java.io.FileInputStream;
@@ -93,26 +97,33 @@ public class LabBot {
   }
 
   /**
-   * Creates IdMeOauthRobot with specified user credentials and urls for Lab environment using
-   * Chrome Driver.
+   * Creates VaOauthRobot with specified user credentials and urls for Lab environment using Chrome
+   * Driver.
    *
    * @param userCredentials Credentials for the user to perform operations against.
    * @param baseUrl URLs to perform operations against.
    */
-  private IdMeOauthRobot makeLabBot(
+  private VaOauthRobot makeLabBot(
       UserCredentials userCredentials, String baseUrl, OAuthCredentialsMode credentialsMode) {
     SmartOnFhirUrls urls = new SmartOnFhirUrls(baseUrl);
     Authorization authorization = makeAuthorization(urls);
+    OauthLoginDriver loginDriver =
+        config.credentialsType() == OAuthCredentialsType.MY_HEALTHE_VET
+            ? new MyHealtheVetOauthLoginDriver()
+            : new IdMeOauthLoginDriver();
     Configuration configuration =
         Configuration.builder()
+            .skipTwoFactorAuth(config.skipTwoFactorAuth())
             .authorization(authorization)
             .tokenUrl(urls.token())
             .user(userCredentials)
             .chromeDriver(config.driver())
+            .oauthLoginDriver(loginDriver)
             .headless(config.headless())
             .credentialsMode(credentialsMode)
             .build();
-    return IdMeOauthRobot.of(configuration);
+
+    return VaOauthRobot.of(configuration);
   }
 
   /**
@@ -137,26 +148,14 @@ public class LabBot {
                         .user(tokenResult.user())
                         .tokenExchange(tokenResult.tokenExchange());
                 try {
-                  URL baseUrl = new URL(config.baseUrl());
-                  URL url =
-                      new URL(
-                          baseUrl.getProtocol(),
-                          baseUrl.getHost(),
-                          path.replace("{icn}", tokenResult.tokenExchange.patient()));
-                  HttpURLConnection con = (HttpURLConnection) url.openConnection();
-                  con.setRequestProperty(
-                      "Authorization", "Bearer " + tokenResult.tokenExchange.accessToken());
-                  con.setRequestMethod("GET");
-                  log.info("Sending request to: " + url.toString());
-
-                  try (var reader =
-                      new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8)) {
-                    resultBuilder.response(CharStreams.toString(reader));
-                  }
+                  resultBuilder.response(
+                      request(
+                          path.replace("{icn}", tokenResult.tokenExchange.patient()),
+                          tokenResult.tokenExchange.accessToken()));
                 } catch (Exception e) {
                   log.error(
                       "Request failure {} {}: {}",
-                      tokenResult.user(),
+                      tokenResult.user().id(),
                       path,
                       e.getMessage(),
                       e.getCause());
@@ -169,6 +168,20 @@ public class LabBot {
     }
     results(ex, futures);
     return responseUserResultList;
+  }
+
+  /** Send a request to the path with the access token. */
+  @SneakyThrows
+  public String request(String path, String accessToken) {
+    URL baseUrl = new URL(config.baseUrl());
+    URL url = new URL(baseUrl.getProtocol(), baseUrl.getHost(), path);
+    HttpURLConnection con = (HttpURLConnection) url.openConnection();
+    con.setRequestProperty("Authorization", "Bearer " + accessToken);
+    con.setRequestMethod("GET");
+    log.info("Sending request to: " + url.toString());
+    try (var reader = new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8)) {
+      return CharStreams.toString(reader);
+    }
   }
 
   private void results(ExecutorService ex, List<Future<?>> futures) throws InterruptedException {
@@ -206,7 +219,7 @@ public class LabBot {
               () -> {
                 UserCredentials userCredentials =
                     UserCredentials.builder().id(userId).password(config.userPassword()).build();
-                IdMeOauthRobot bot =
+                VaOauthRobot bot =
                     makeLabBot(userCredentials, config.baseUrl(), config().credentialsMode());
                 labBotUserResultList.add(
                     LabBotUserResult.builder()
@@ -239,23 +252,27 @@ public class LabBot {
     }
 
     String aud() {
-      return valueOf("lab.aud");
+      return valueOf("va-oauth-robot.aud");
     }
 
     String baseUrl() {
-      return valueOf("lab.base-url");
+      return valueOf("va-oauth-robot.base-url");
     }
 
     String clientId() {
-      return valueOf("lab.client-id");
+      return valueOf("va-oauth-robot.client-id");
     }
 
     String clientSecret() {
-      return valueOf("lab.client-secret");
+      return valueOf("va-oauth-robot.client-secret");
     }
 
     OAuthCredentialsMode credentialsMode() {
-      return OAuthCredentialsMode.valueOf(valueOf("lab.credentials-mode"));
+      return OAuthCredentialsMode.valueOf(valueOf("va-oauth-robot.credentials-mode"));
+    }
+
+    OAuthCredentialsType credentialsType() {
+      return OAuthCredentialsType.valueOf(valueOf("va-oauth-robot.credentials-type"));
     }
 
     String driver() {
@@ -267,15 +284,19 @@ public class LabBot {
     }
 
     String redirectUrl() {
-      return valueOf("lab.redirect-url");
+      return valueOf("va-oauth-robot.redirect-url");
+    }
+
+    boolean skipTwoFactorAuth() {
+      return BooleanUtils.toBoolean(valueOf("va-oauth-robot.skip-two-factor-authentication"));
     }
 
     String state() {
-      return valueOf("lab.state");
+      return valueOf("va-oauth-robot.state");
     }
 
     String userPassword() {
-      return valueOf("lab.user-password");
+      return valueOf("va-oauth-robot.user-password");
     }
 
     private String valueOf(String name) {
@@ -286,6 +307,7 @@ public class LabBot {
   }
 
   public static class InvalidConformanceStatement extends RuntimeException {
+
     InvalidConformanceStatement(String message) {
       super(message);
     }
