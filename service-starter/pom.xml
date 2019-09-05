@@ -96,12 +96,7 @@
   </build>
   <profiles>
     <profile>
-      <id>docker</id>
-      <activation>
-        <file>
-          <exists>src/main/resources/application.properties</exists>
-        </file>
-      </activation>
+      <id>release</id>
       <build>
         <plugins>
           <plugin>
@@ -142,9 +137,15 @@
             <executions>
               <execution>
                 <id>build</id>
-                <phase>deploy</phase>
+                <phase>package</phase>
                 <goals>
                   <goal>build</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>deploy</id>
+                <phase>deploy</phase>
+                <goals>
                   <goal>push</goal>
                 </goals>
               </execution>
