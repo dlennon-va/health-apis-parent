@@ -124,6 +124,7 @@
                         </files>
                       </inline>
                     </assembly>
+                    <imagePullPolicy>Always</imagePullPolicy>
                     <env>
                       <AWS_APP_NAME>${project.artifactId}</AWS_APP_NAME>
                     </env>
