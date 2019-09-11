@@ -10,4 +10,9 @@
         <Class name="gov.va.api.health.sentinel.LabBot$Config"/>
         <Bug pattern="PATH_TRAVERSAL_IN"/>
     </Match>
+	<!-- Annotation parameter for file must be a string.  Value is determined by test class and not exposed. -->
+    <Match>
+        <Class name="gov.va.api.health.sentinel.junit.LabBotOauthLoginRule$1"/>
+        <Bug pattern="PATH_TRAVERSAL_IN"/>
+    </Match>
 </FindBugsFilter>

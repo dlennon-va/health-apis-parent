@@ -199,7 +199,8 @@ public class LabBot {
 
   /**
    * Returns tokens for each user. Alternates between sending {client-id}:{client-secret} as a
-   * header, or in the request body.
+   * header, or in the request body. Note that login failures will capture a failed token exchange
+   * containing the encountered error.
    */
   @SneakyThrows
   public List<LabBotUserResult> tokens() {
@@ -219,13 +220,32 @@ public class LabBot {
               () -> {
                 UserCredentials userCredentials =
                     UserCredentials.builder().id(userId).password(config.userPassword()).build();
-                VaOauthRobot bot =
-                    makeLabBot(userCredentials, config.baseUrl(), config().credentialsMode());
-                labBotUserResultList.add(
-                    LabBotUserResult.builder()
-                        .user(userCredentials)
-                        .tokenExchange(bot.token())
-                        .build());
+                try {
+                  VaOauthRobot bot =
+                      makeLabBot(userCredentials, config.baseUrl(), config().credentialsMode());
+                  labBotUserResultList.add(
+                      LabBotUserResult.builder()
+                          .user(userCredentials)
+                          .tokenExchange(bot.token())
+                          .build());
+                } catch (Exception e) {
+                  // Catch interface exceptions (incorrect username or password, etc)
+                  // as a failed token exchange.
+                  TokenExchange te =
+                      new TokenExchange(
+                          e.getClass().getSimpleName(),
+                          e.getMessage(),
+                          null,
+                          null,
+                          0,
+                          null,
+                          null,
+                          null,
+                          null,
+                          null);
+                  labBotUserResultList.add(
+                      LabBotUserResult.builder().user(userCredentials).tokenExchange(te).build());
+                }
               }));
     }
     results(ex, futures);
