@@ -28,7 +28,6 @@
       <artifactId>sentinel</artifactId>
       <version>3.1.5-SNAPSHOT</version>
       <classifier>junit</classifier>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>gov.va.api.health</groupId>
