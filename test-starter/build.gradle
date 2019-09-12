@@ -1,0 +1,10 @@
+
+dependencies {
+    compile 'gov.va.api.health:sentinel:3.1.5-SNAPSHOT'
+    compile 'gov.va.api.health:service-auto-config:3.1.5-SNAPSHOT'
+    compile 'org.springframework.boot:spring-boot-starter-test:2.1.8.RELEASE'
+    compile 'io.rest-assured:rest-assured:3.1.1'
+    compile 'ch.qos.logback:logback-classic:1.2.3'
+    compileOnly 'org.projectlombok:lombok:1.18.8'
+}
+

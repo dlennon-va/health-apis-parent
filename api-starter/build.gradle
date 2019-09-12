@@ -1,0 +1,12 @@
+
+
+dependencies {
+    compile 'io.swagger.core.v3:swagger-core:2.0.6'
+    compile 'javax.ws.rs:javax.ws.rs-api:2.0.1'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.9.9.3'
+    compile 'javax.validation:validation-api:2.0.1.Final'
+    testCompile 'org.springframework.boot:spring-boot-starter-test:2.1.8.RELEASE'
+    testCompile 'gov.va.api.health:service-auto-config:3.1.5-SNAPSHOT'
+    compileOnly 'org.projectlombok:lombok:1.18.8'
+}
+
