@@ -25,12 +25,6 @@
     </dependency>
     <dependency>
       <groupId>gov.va.api.health</groupId>
-      <artifactId>sentinel</artifactId>
-      <version>3.1.5-SNAPSHOT</version>
-      <classifier>junit</classifier>
-    </dependency>
-    <dependency>
-      <groupId>gov.va.api.health</groupId>
       <artifactId>service-auto-config</artifactId>
       <version>3.1.5-SNAPSHOT</version>
     </dependency>
