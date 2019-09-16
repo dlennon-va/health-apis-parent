@@ -15,7 +15,6 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
@@ -344,7 +343,7 @@ public class VaOauthRobot {
 
   @Value
   @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
-  @AllArgsConstructor
+  @Builder
   public static class TokenExchange {
 
     @JsonProperty("error")

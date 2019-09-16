@@ -231,20 +231,15 @@ public class LabBot {
                 } catch (Exception e) {
                   // Catch interface exceptions (incorrect username or password, etc)
                   // as a failed token exchange.
-                  TokenExchange te =
-                      new TokenExchange(
-                          e.getClass().getSimpleName(),
-                          e.getMessage(),
-                          null,
-                          null,
-                          0,
-                          null,
-                          null,
-                          null,
-                          null,
-                          null);
                   labBotUserResultList.add(
-                      LabBotUserResult.builder().user(userCredentials).tokenExchange(te).build());
+                      LabBotUserResult.builder()
+                          .user(userCredentials)
+                          .tokenExchange(
+                              TokenExchange.builder()
+                                  .error(e.getClass().getSimpleName())
+                                  .errorDescription(e.getMessage())
+                                  .build())
+                          .build());
                 }
               }));
     }
