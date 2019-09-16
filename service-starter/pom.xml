@@ -96,6 +96,9 @@
   </build>
   <profiles>
     <profile>
+      <!-- Building docker images locally can be invoked through the maven goal:
+      mvn io.fabric8:docker-maven-plugin:build
+      Do a mvn clean install in addition if you'd like to do regular build activities as well. -->
       <id>docker</id>
       <activation>
         <file>
