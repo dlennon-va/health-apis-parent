@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -147,23 +148,16 @@ public class LabBot {
                     LabBotUserResult.builder()
                         .user(tokenResult.user())
                         .tokenExchange(tokenResult.tokenExchange());
-                try {
+                // Only attempt request if a valid token was acquired.
+                // We want request issues to explode the test, rather than be classified as "Bad
+                // login".
+                if (!tokenResult.tokenExchange.isError()) {
                   resultBuilder.response(
                       request(
                           path.replace("{icn}", tokenResult.tokenExchange.patient()),
                           tokenResult.tokenExchange.accessToken()));
-                } catch (Exception e) {
-                  log.error(
-                      "Request failure {} {}: {}",
-                      tokenResult.user().id(),
-                      path,
-                      e.getMessage(),
-                      e.getCause());
-                  resultBuilder.response(
-                      "ERROR: " + e.getClass().getName() + ": " + e.getMessage());
-                } finally {
-                  responseUserResultList.add(resultBuilder.build());
                 }
+                responseUserResultList.add(resultBuilder.build());
               }));
     }
     results(ex, futures);
@@ -184,17 +178,27 @@ public class LabBot {
     }
   }
 
-  private void results(ExecutorService ex, List<Future<?>> futures) throws InterruptedException {
+  private void results(ExecutorService ex, List<Future<?>> futures) throws Throwable {
     ex.shutdown();
     ex.awaitTermination(10, TimeUnit.MINUTES);
-    futures.forEach(
-        f -> {
-          try {
-            f.get();
-          } catch (Exception e) {
-            log.error(e.getMessage());
-          }
-        });
+    // To avoid the concern that a program error, e.g. NullPointerException, be classified as
+    // "Failed to login". I'd much rather see those types of issues explode the test, rather than be
+    // classified as "Bad login".
+    List<Throwable> exceptionList = new CopyOnWriteArrayList<>();
+    for (Future<?> f : futures) {
+      try {
+        f.get();
+      } catch (InterruptedException | ExecutionException e) {
+        log.error(e.getMessage());
+        exceptionList.add(e.getCause());
+      }
+    }
+    // After logging the exceptions that might have occurred try and rethrow the cause of the
+    // first one encountered so the calling test explodes.
+    if (!exceptionList.isEmpty()) {
+      log.error("{} runtime failures.", exceptionList.size());
+      throw exceptionList.get(0);
+    }
   }
 
   /**
@@ -228,9 +232,12 @@ public class LabBot {
                           .user(userCredentials)
                           .tokenExchange(bot.token())
                           .build());
-                } catch (Exception e) {
-                  // Catch interface exceptions (incorrect username or password, etc)
-                  // as a failed token exchange.
+                } catch (IllegalStateException | InvalidConformanceStatement e) {
+                  // It appears that the intent of the robot is to throw an IllegalStateException
+                  // for problems with login/authentication and any other exceptions are desired to
+                  // fall through to the calling unit test.
+                  // It also appears that InvalidConformanceStatement is also a 'valid' or expected
+                  // exception to treat as bad login.
                   labBotUserResultList.add(
                       LabBotUserResult.builder()
                           .user(userCredentials)
