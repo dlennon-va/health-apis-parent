@@ -10,20 +10,4 @@
         <Class name="gov.va.api.health.sentinel.LabBot$Config"/>
         <Bug pattern="PATH_TRAVERSAL_IN"/>
     </Match>
-	<!-- Unit tests were written to store a local file report showing the
-	results of using LabBot to login a list of users.  This file does not
-	appear to be used for anything but perhaps visual assessment by a
-	developer but for consistency the rule exposes support for this report
-	file to unit tests via an annotation to be specified to write the report
-	file.  By default, the filename is local to the running directory named
-	users.txt.  The annotation allows this default name to be overridden.
-	Annotations do not allow File values to be specified via parameter so
-	the filename must be a string.  If report is enabled, this value of the
-	string is used to create a file by this name.  This rule is not anticipated
-	to be exposed within application code so therefore, this should is
-	considered a false positive. -->
-    <Match>
-        <Class name="gov.va.api.health.sentinel.junit.LabBotOauthLoginRule$1"/>
-        <Bug pattern="PATH_TRAVERSAL_IN"/>
-    </Match>
 </FindBugsFilter>
