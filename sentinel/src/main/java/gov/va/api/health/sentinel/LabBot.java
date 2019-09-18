@@ -1,5 +1,6 @@
 package gov.va.api.health.sentinel;
 
+import static org.apache.commons.lang3.StringUtils.isNotBlank;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -34,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -187,14 +190,24 @@ public class LabBot {
   private void results(ExecutorService ex, List<Future<?>> futures) throws InterruptedException {
     ex.shutdown();
     ex.awaitTermination(10, TimeUnit.MINUTES);
-    futures.forEach(
-        f -> {
-          try {
-            f.get();
-          } catch (Exception e) {
-            log.error(e.getMessage());
-          }
-        });
+    String errors =
+        futures
+            .stream()
+            .map(
+                f -> {
+                  try {
+                    f.get();
+                    return null;
+                  } catch (Exception e) {
+                    log.error(e.getMessage());
+                    return e.getMessage();
+                  }
+                })
+            .filter(Objects::nonNull)
+            .collect(Collectors.joining("\n"));
+    if (isNotBlank(errors)) {
+      throw new AssertionError(errors);
+    }
   }
 
   /**
