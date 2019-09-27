@@ -1,7 +1,5 @@
 package gov.va.api.health.sentinel;
 
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
-
 import io.restassured.RestAssured;
 import io.restassured.specification.RequestSpecification;
 import java.util.Optional;
@@ -18,11 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 @Builder
 @AllArgsConstructor
 public final class ServiceDefinition {
-  static {
-    log.info(
-        "Using jargonaut header is {} (Override -Djargonaut=true|false)",
-        System.getProperty("jargonaut", "unset"));
-  }
 
   String url;
 
@@ -32,7 +25,7 @@ public final class ServiceDefinition {
 
   Supplier<Optional<String>> accessToken;
 
-  /** Returns Request Specification with or without jargonaut header. */
+  /** Returns Request Specification. */
   public RequestSpecification requestSpecification() {
     RequestSpecification spec =
         RestAssured.given()
@@ -41,10 +34,6 @@ public final class ServiceDefinition {
             .relaxedHTTPSValidation()
             .log()
             .ifValidationFails();
-    String jargonaut = System.getProperty("jargonaut");
-    if (isNotBlank(jargonaut)) {
-      spec.header("jargonaut", jargonaut);
-    }
     Optional<String> token = accessToken.get();
     if (token.isPresent()) {
       spec = spec.header("Authorization", "Bearer " + token.get());
